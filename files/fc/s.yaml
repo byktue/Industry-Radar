@@ -1,0 +1,43 @@
+edition: 1.0.0
+name: industry-radar
+access: default
+
+services:
+  industry-radar-fc:
+    component: fc
+    props:
+      region: cn-hangzhou
+      service:
+        name: industry-radar-service
+        description: 行业雷达监控服务
+        logConfig: auto
+        # 注意：需要替换 YOUR_ACCOUNT_ID 为您的阿里云账号 ID
+        role: acs:ram::YOUR_ACCOUNT_ID:role/aliyunfcdefaultrole
+      function:
+        name: radar-handler
+        description: 行业雷达定时巡检函数
+        runtime: python3.10
+        codeUri: ./
+        handler: fc_handler.handler
+        timeout: 600
+        memorySize: 512
+        instanceConcurrency: 1
+        environmentVariables:
+          # 环境变量从本地环境读取（需先在本地设置）
+          OSS_ACCESS_KEY_ID: ${env(OSS_ACCESS_KEY_ID)}
+          OSS_ACCESS_KEY_SECRET: ${env(OSS_ACCESS_KEY_SECRET)}
+          OSS_ENDPOINT: ${env(OSS_ENDPOINT)}
+          OSS_BUCKET: ${env(OSS_BUCKET)}
+          OSS_PREFIX: ${env(OSS_PREFIX)}
+          DEFAULT_KEYWORD: ${env(DEFAULT_KEYWORD)}
+          PYTHONPATH: /code
+      triggers:
+        - name: timer-trigger
+          type: timer
+          config:
+            # 6 位 Cron 表达式：秒 分 时 日 月 周
+            # 每 6 小时执行一次（0:00, 6:00, 12:00, 18:00）
+            cronExpression: "0 0 */6 * * *"
+            enable: true
+            # 可选：触发器传递的 payload
+            payload: '{"keyword": "半导体"}'
