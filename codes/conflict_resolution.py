@@ -20,6 +20,8 @@ def resolve_conflicts(changes: List[ChangeItem]) -> List[ConflictDecision]:
     1. 选择权重最高的来源作为最终结论
     2. 低权重来源标记为"待核实"
     3. 记录仲裁理由
+    
+    注意：只有存在真正冲突（同一字段多个来源）时才返回决策
     """
     grouped: Dict[str, List[ChangeItem]] = {}
     for c in changes:
@@ -27,7 +29,7 @@ def resolve_conflicts(changes: List[ChangeItem]) -> List[ConflictDecision]:
 
     decisions: List[ConflictDecision] = []
     for field, items in grouped.items():
-        # 如果只有一个来源，无需仲裁
+        # 如果只有一个来源，不是真正的冲突，但仍然返回决策（用于统一处理）
         if len(items) == 1:
             chosen = items[0]
             decisions.append(
@@ -36,9 +38,10 @@ def resolve_conflicts(changes: List[ChangeItem]) -> List[ConflictDecision]:
                     final_value=chosen.new,
                     chosen_source=chosen.source if isinstance(chosen.source, SourceType) else SourceType.MEDIA,
                     pending_sources=[],
-                    reason="唯一来源，无需仲裁",
+                    reason="唯一来源",
                 )
             )
+            logger.info(f"[ConflictResolution] Field '{field}': single source, no conflict")
             continue
         
         # 多来源冲突：按权重排序
@@ -74,7 +77,7 @@ def resolve_conflicts(changes: List[ChangeItem]) -> List[ConflictDecision]:
             pending_names = [s.value for s in pending_sources]
             reason += f"，其他来源待核实: {', '.join(pending_names)}"
         
-        logger.info(f"[ConflictResolution] Field '{field}': chosen={chosen_source.value} "
+        logger.info(f"[ConflictResolution] Field '{field}': CONFLICT - chosen={chosen_source.value} "
                    f"(weight={chosen_weight}), pending={len(pending_sources)}")
         
         decisions.append(

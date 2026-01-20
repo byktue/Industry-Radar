@@ -68,13 +68,14 @@ class StorageClient:
                     data = json.load(f)
                 with open(current_report_path, "w", encoding="utf-8") as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
+                logger.info(f"[StorageClient] Updated current_report.json from latest_report.json")
             
             # 将当前抓取保存为 latest_report.json（作为下次的 old_snapshot）
             with open(latest_report_path, "w", encoding="utf-8") as f:
                 json.dump(self._snapshot_to_dict(snapshot), f, ensure_ascii=False, indent=2)
             logger.info(f"[StorageClient] Updated latest_report.json")
         except Exception as e:
-            logger.error(f"[StorageClient] Failed to update report indexes: {e}")
+            logger.error(f"[StorageClient] Failed to update report indexes (latest_report.json or current_report.json): {e}")
         
         return history_path
 

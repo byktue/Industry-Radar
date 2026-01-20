@@ -14,12 +14,15 @@ import json
 import logging
 import os
 import sys
+from pathlib import Path
 from typing import Any, Dict
 
 # 添加 codes 目录到 Python 路径
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-CODES_DIR = os.path.join(REPO_ROOT, "codes")
-sys.path.insert(0, CODES_DIR)
+# 预期文件结构: files/fc/fc_handler.py -> codes/
+FILE_DIR = Path(__file__).parent
+REPO_ROOT = FILE_DIR.parent.parent
+CODES_DIR = REPO_ROOT / "codes"
+sys.path.insert(0, str(CODES_DIR))
 
 from orchestrator import run_pipeline  # noqa: E402
 from config import DEFAULT_KEYWORD  # noqa: E402
