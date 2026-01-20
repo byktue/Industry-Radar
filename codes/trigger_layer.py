@@ -1,24 +1,47 @@
 from __future__ import annotations
 
+import json
 from typing import Any, Dict
 
 from orchestrator import run_pipeline
 from config import DEFAULT_KEYWORD
 
 
-def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    """Serverless 触发入口。
+def handler(event: Any, context: Any) -> Dict[str, Any]:
+    """阿里云 FC 的入口函数（兼容定时触发器 payload）。
 
-    event: 平台传入的事件对象（包含 keyword、cron 信息等）
-    context: 平台上下文
+    event 可能是 bytes / str（来自触发器 payload），也可能已是 dict。
     """
-    keyword = event.get("keyword") if isinstance(event, dict) else None
-    keyword = keyword or DEFAULT_KEYWORD
+    keyword = DEFAULT_KEYWORD
 
+    try:
+        if isinstance(event, (bytes, bytearray)):
+            evt = json.loads(event.decode("utf-8") or "{}")
+        elif isinstance(event, str):
+            evt = json.loads(event or "{}")
+        elif isinstance(event, dict):
+            evt = event
+        else:
+            evt = {}
+        keyword = evt.get("keyword", DEFAULT_KEYWORD)
+    except Exception:
+        evt = {}
+        keyword = DEFAULT_KEYWORD
+
+    # 调用已有编排逻辑
     result = run_pipeline(keyword=keyword)
-    return {
+
+    changes = result.get("changes", [])
+    conflicts = result.get("conflicts", [])
+
+    summary = {
         "keyword": keyword,
-        "status": "ok",
-        "changes": len(result.get("changes", [])),
-        "conflicts": len(result.get("conflicts", [])),
+        "raw_changes_count": len(changes),
+        "conflicts_count": len(conflicts),
+    }
+
+    return {
+        "status": "success",
+        "global_summary": summary,
+        "raw_changes_count": summary["raw_changes_count"],
     }
