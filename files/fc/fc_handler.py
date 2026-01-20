@@ -32,6 +32,20 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+def _normalize_source_value(source: Any) -> str:
+    """标准化来源值为字符串。
+    
+    Args:
+        source: 可能是 SourceType 枚举、字符串或其他类型
+        
+    Returns:
+        来源的字符串表示
+    """
+    if hasattr(source, "value"):
+        return source.value
+    return str(source)
+
+
 def handler(event: Any, context: Any) -> Dict[str, Any]:
     """
     阿里云 FC 入口函数
@@ -93,7 +107,7 @@ def handler(event: Any, context: Any) -> Dict[str, Any]:
                         "old": c.old,
                         "new": c.new,
                         "status": c.status,
-                        "source": c.source.value if hasattr(c.source, "value") else str(c.source),
+                        "source": _normalize_source_value(c.source),
                         "confidence": c.confidence,
                     }
                     for c in result.get("changes", [])
@@ -102,9 +116,9 @@ def handler(event: Any, context: Any) -> Dict[str, Any]:
                     {
                         "field": d.field,
                         "final_value": d.final_value,
-                        "chosen_source": d.chosen_source.value if hasattr(d.chosen_source, "value") else str(d.chosen_source),
+                        "chosen_source": _normalize_source_value(d.chosen_source),
                         "pending_sources": [
-                            s.value if hasattr(s, "value") else str(s) for s in d.pending_sources
+                            _normalize_source_value(s) for s in d.pending_sources
                         ],
                         "reason": d.reason,
                     }

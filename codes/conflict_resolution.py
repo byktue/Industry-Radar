@@ -8,6 +8,26 @@ from models import ChangeItem, ConflictDecision, SOURCE_WEIGHTS, SourceType
 logger = logging.getLogger(__name__)
 
 
+def _normalize_source(source: any) -> SourceType:
+    """标准化来源类型，确保返回 SourceType 枚举。
+    
+    Args:
+        source: 可能是 SourceType 枚举或字符串
+        
+    Returns:
+        SourceType 枚举，默认为 MEDIA
+    """
+    if isinstance(source, SourceType):
+        return source
+    # 如果是字符串，尝试转换
+    if isinstance(source, str):
+        try:
+            return SourceType(source)
+        except ValueError:
+            logger.warning(f"[ConflictResolution] Unknown source type '{source}', defaulting to MEDIA")
+    return SourceType.MEDIA
+
+
 def resolve_conflicts(changes: List[ChangeItem]) -> List[ConflictDecision]:
     """冲突仲裁：当同一字段有多来源冲突时，按权重选择最终结论。
     
@@ -36,7 +56,7 @@ def resolve_conflicts(changes: List[ChangeItem]) -> List[ConflictDecision]:
                 ConflictDecision(
                     field=field,
                     final_value=chosen.new,
-                    chosen_source=chosen.source if isinstance(chosen.source, SourceType) else SourceType.MEDIA,
+                    chosen_source=_normalize_source(chosen.source),
                     pending_sources=[],
                     reason="唯一来源",
                 )
@@ -47,10 +67,7 @@ def resolve_conflicts(changes: List[ChangeItem]) -> List[ConflictDecision]:
         # 多来源冲突：按权重排序
         items_sorted = sorted(
             items,
-            key=lambda x: SOURCE_WEIGHTS.get(
-                x.source if isinstance(x.source, SourceType) else SourceType.MEDIA,
-                0.0
-            ),
+            key=lambda x: SOURCE_WEIGHTS.get(_normalize_source(x.source), 0.0),
             reverse=True,
         )
         
@@ -58,19 +75,13 @@ def resolve_conflicts(changes: List[ChangeItem]) -> List[ConflictDecision]:
         pending_items = items_sorted[1:]
         
         # 获取权重信息
-        chosen_weight = SOURCE_WEIGHTS.get(
-            chosen.source if isinstance(chosen.source, SourceType) else SourceType.MEDIA,
-            0.0
-        )
+        chosen_source = _normalize_source(chosen.source)
+        chosen_weight = SOURCE_WEIGHTS.get(chosen_source, 0.0)
         
         # 提取待核实来源（低权重来源）
-        pending_sources = []
-        for item in pending_items:
-            source = item.source if isinstance(item.source, SourceType) else SourceType.MEDIA
-            pending_sources.append(source)
+        pending_sources = [_normalize_source(item.source) for item in pending_items]
         
         # 构造仲裁理由
-        chosen_source = chosen.source if isinstance(chosen.source, SourceType) else SourceType.MEDIA
         reason = f"权重最高来源优先 (Weight={chosen_weight})"
         
         if pending_sources:

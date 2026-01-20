@@ -65,7 +65,6 @@ def run_pipeline(keyword: str, max_retries: int = 3) -> Dict[str, List]:
     # 如果采集成功但结果为空，记录警告但继续处理
     if not new_items:
         logger.warning(f"[Pipeline] Fetch succeeded but returned empty result (no items matching keyword)")
-        new_items = []  # 确保是空列表而不是 None
 
     # 2. 增量对比阶段
     try:

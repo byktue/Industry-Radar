@@ -59,6 +59,8 @@ class StorageClient:
         
         # 3. 更新 current_report.json（用于下次增量对比的 old_snapshot）
         # 注意：只有在成功处理后才更新此文件
+        # 潜在的竞态条件：如果进程在复制和写入之间失败，可能导致两个文件内容相同
+        # 这是可接受的，因为不会导致数据丢失，只是少一次增量快照
         current_report_path = os.path.join(self.base_dir, "current_report.json")
         try:
             # 如果已有 latest_report.json，将其复制为 current_report.json
