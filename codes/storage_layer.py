@@ -15,113 +15,71 @@ logger = logging.getLogger(__name__)
 class StorageClient:
     """存储层：将快照写入对象存储（此处用本地文件模拟）。
     
-    支持以下存储结构：
-    - history/{timestamp}/: 历史归档目录
-      - fetch.json: 原始抓取数据
-      - report.json: 分析报告快照
-    - latest_fetch.json: 最新抓取的原始数据
-    - current_report.json: 当前报告（用于增量对比的旧快照）
+    支持：
+    1. 历史快照归档（history/ 目录）
+    2. 最新数据索引（latest_fetch.json, latest_report.json）
+    3. 增量对比支持（提供 old_snapshot 和 new_items 持久化）
+    4. 失败保护（采集失败时不覆盖旧数据）
     """
 
     def __init__(self, base_dir: str = DATA_DIR) -> None:
         self.base_dir = base_dir
-        self.history_dir = os.path.join(self.base_dir, "history")
+        self.history_dir = os.path.join(base_dir, "history")
         os.makedirs(self.base_dir, exist_ok=True)
         os.makedirs(self.history_dir, exist_ok=True)
 
-    def save_fetch_data(self, keyword: str, items: List[NewsItem]) -> str:
-        """保存原始抓取数据到 latest_fetch.json
+    def save_snapshot(self, keyword: str, items: List[NewsItem], success: bool = True) -> str:
+        """保存快照到存储层。
         
         Args:
             keyword: 关键词
-            items: 抓取的新闻条目列表
-            
+            items: 抓取的新闻条目
+            success: 是否采集成功（失败时不覆盖旧数据）
+        
         Returns:
-            str: 保存的文件路径
+            保存的文件路径
         """
+        if not success:
+            logger.warning("[StorageClient] Fetch failed, skip saving snapshot to prevent data loss")
+            return ""
+        
         snapshot = ReportSnapshot(keyword=keyword, collected_at=now_ts(), items=items)
-        path = os.path.join(self.base_dir, "latest_fetch.json")
         
-        try:
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(self._snapshot_to_dict(snapshot), f, ensure_ascii=False, indent=2)
-            logger.info(f"Saved fetch data to {path}")
-            return path
-        except Exception as e:
-            logger.error(f"Failed to save fetch data: {e}")
-            raise
-    
-    def save_current_report(self, keyword: str, items: List[NewsItem]) -> str:
-        """保存当前报告到 current_report.json（用于下次增量对比）
+        # 1. 保存到历史目录（按时间戳归档）
+        history_filename = f"report_{snapshot.collected_at}.json"
+        history_path = os.path.join(self.history_dir, history_filename)
+        with open(history_path, "w", encoding="utf-8") as f:
+            json.dump(self._snapshot_to_dict(snapshot), f, ensure_ascii=False, indent=2)
+        logger.info(f"[StorageClient] Saved history snapshot: {history_path}")
         
-        Args:
-            keyword: 关键词
-            items: 新闻条目列表
-            
-        Returns:
-            str: 保存的文件路径
-        """
-        snapshot = ReportSnapshot(keyword=keyword, collected_at=now_ts(), items=items)
-        path = os.path.join(self.base_dir, "current_report.json")
-        
-        try:
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(self._snapshot_to_dict(snapshot), f, ensure_ascii=False, indent=2)
-            logger.info(f"Saved current report to {path}")
-            return path
-        except Exception as e:
-            logger.error(f"Failed to save current report: {e}")
-            raise
-    
-    def save_snapshot(self, keyword: str, items: List[NewsItem]) -> str:
-        """保存完整快照（兼容旧接口）
-        
-        此方法会同时：
-        1. 保存到 latest_fetch.json
-        2. 保存到 current_report.json
-        3. 归档到 history/{timestamp}/
-        
-        Args:
-            keyword: 关键词
-            items: 新闻条目列表
-            
-        Returns:
-            str: 历史归档目录路径
-        """
-        timestamp = now_ts()
-        snapshot = ReportSnapshot(keyword=keyword, collected_at=timestamp, items=items)
-        
-        # 序列化一次，多次使用
-        snapshot_dict = self._snapshot_to_dict(snapshot)
-        snapshot_json = json.dumps(snapshot_dict, ensure_ascii=False, indent=2)
-        
-        # 保存到 latest_fetch.json
+        # 2. 保存最新抓取数据（用于增量对比的 new_items）
         latest_fetch_path = os.path.join(self.base_dir, "latest_fetch.json")
         with open(latest_fetch_path, "w", encoding="utf-8") as f:
-            f.write(snapshot_json)
-        logger.info(f"Saved fetch data to {latest_fetch_path}")
+            json.dump(self._snapshot_to_dict(snapshot), f, ensure_ascii=False, indent=2)
+        logger.info(f"[StorageClient] Updated latest_fetch.json")
         
-        # 保存到 current_report.json
+        # 3. 更新 current_report.json（用于下次增量对比的 old_snapshot）
+        # 注意：只有在成功处理后才更新此文件
+        # 潜在的竞态条件：如果进程在复制和写入之间失败，可能导致两个文件内容相同
+        # 这是可接受的，因为不会导致数据丢失，只是少一次增量快照
         current_report_path = os.path.join(self.base_dir, "current_report.json")
-        with open(current_report_path, "w", encoding="utf-8") as f:
-            f.write(snapshot_json)
-        logger.info(f"Saved current report to {current_report_path}")
+        try:
+            # 如果已有 latest_report.json，将其复制为 current_report.json
+            latest_report_path = os.path.join(self.base_dir, "latest_report.json")
+            if os.path.exists(latest_report_path):
+                with open(latest_report_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                with open(current_report_path, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                logger.info(f"[StorageClient] Updated current_report.json from latest_report.json")
+            
+            # 将当前抓取保存为 latest_report.json（作为下次的 old_snapshot）
+            with open(latest_report_path, "w", encoding="utf-8") as f:
+                json.dump(self._snapshot_to_dict(snapshot), f, ensure_ascii=False, indent=2)
+            logger.info(f"[StorageClient] Updated latest_report.json")
+        except Exception as e:
+            logger.error(f"[StorageClient] Failed to update report indexes (latest_report.json or current_report.json): {e}")
         
-        # 归档到 history/{timestamp}/
-        history_path = os.path.join(self.history_dir, timestamp)
-        os.makedirs(history_path, exist_ok=True)
-        
-        # 保存 fetch.json
-        fetch_file = os.path.join(history_path, "fetch.json")
-        with open(fetch_file, "w", encoding="utf-8") as f:
-            f.write(snapshot_json)
-        
-        # 保存 report.json（与 fetch.json 相同，为未来扩展预留）
-        report_file = os.path.join(history_path, "report.json")
-        with open(report_file, "w", encoding="utf-8") as f:
-            f.write(snapshot_json)
-        
-        logger.info(f"Archived snapshot to {history_path}")
         return history_path
 
     def load_latest_fetch(self) -> Optional[ReportSnapshot]:
@@ -163,62 +121,72 @@ class StorageClient:
             return None
     
     def load_latest_snapshot(self) -> Optional[ReportSnapshot]:
-        """加载最新快照（兼容旧接口）
+        """加载最新快照（用于增量对比的 old_snapshot）。
         
-        优先从 current_report.json 加载，如不存在则从历史目录加载最新的
-        
-        Returns:
-            Optional[ReportSnapshot]: 快照对象
+        优先级：
+        1. latest_report.json（最新报告）
+        2. current_report.json（当前报告）
+        3. 历史快照中的最新一个
         """
-        # 优先读取 current_report.json
-        snapshot = self.load_current_report()
-        if snapshot:
-            return snapshot
+        # 优先从 latest_report.json 加载
+        latest_report_path = os.path.join(self.base_dir, "latest_report.json")
+        if os.path.exists(latest_report_path):
+            try:
+                with open(latest_report_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                logger.info(f"[StorageClient] Loaded latest_report.json as old_snapshot")
+                return self._dict_to_snapshot(data)
+            except Exception as e:
+                logger.warning(f"[StorageClient] Failed to load latest_report.json: {e}")
         
-        # 兼容旧格式：从 report_*.json 文件加载
+        # 其次从 current_report.json 加载
+        current_report_path = os.path.join(self.base_dir, "current_report.json")
+        if os.path.exists(current_report_path):
+            try:
+                with open(current_report_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                logger.info(f"[StorageClient] Loaded current_report.json as old_snapshot")
+                return self._dict_to_snapshot(data)
+            except Exception as e:
+                logger.warning(f"[StorageClient] Failed to load current_report.json: {e}")
+        
+        # 最后从历史快照加载
         files = self.list_snapshots()
         if not files:
-            # 尝试从历史目录加载
-            return self._load_latest_from_history()
-        
+            logger.info(f"[StorageClient] No previous snapshot found")
+            return None
         latest = sorted(files)[-1]
-        path = os.path.join(self.base_dir, latest)
+        path = os.path.join(self.history_dir, latest)
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        logger.info(f"[StorageClient] Loaded history snapshot: {latest}")
+        return self._dict_to_snapshot(data)
+    
+    def load_latest_fetch(self) -> Optional[ReportSnapshot]:
+        """加载最新抓取数据（用于增量对比的 new_items）。"""
+        latest_fetch_path = os.path.join(self.base_dir, "latest_fetch.json")
+        if not os.path.exists(latest_fetch_path):
+            logger.info(f"[StorageClient] No latest_fetch.json found")
+            return None
+        
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(latest_fetch_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
+            logger.info(f"[StorageClient] Loaded latest_fetch.json")
             return self._dict_to_snapshot(data)
         except Exception as e:
-            logger.error(f"Failed to load latest snapshot from {path}: {e}")
+            logger.error(f"[StorageClient] Failed to load latest_fetch.json: {e}")
             return None
     
-    def _load_latest_from_history(self) -> Optional[ReportSnapshot]:
-        """从 history 目录加载最新快照"""
-        if not os.path.isdir(self.history_dir):
-            return None
-        
-        timestamps = [d for d in os.listdir(self.history_dir) 
-                     if os.path.isdir(os.path.join(self.history_dir, d))]
-        if not timestamps:
-            return None
-        
-        latest_ts = sorted(timestamps)[-1]
-        report_path = os.path.join(self.history_dir, latest_ts, "report.json")
-        
-        if not os.path.exists(report_path):
-            return None
-        
-        try:
-            with open(report_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            return self._dict_to_snapshot(data)
-        except Exception as e:
-            logger.error(f"Failed to load from history: {e}")
-            return None
+    def load_latest_report(self) -> Optional[ReportSnapshot]:
+        """加载最新报告（用于增量对比的 old_snapshot，别名方法）。"""
+        return self.load_latest_snapshot()
 
     def list_snapshots(self) -> List[str]:
-        if not os.path.isdir(self.base_dir):
+        """列出历史快照文件。"""
+        if not os.path.isdir(self.history_dir):
             return []
-        return [f for f in os.listdir(self.base_dir) if f.startswith("report_") and f.endswith(".json")]
+        return [f for f in os.listdir(self.history_dir) if f.startswith("report_") and f.endswith(".json")]
 
     def _snapshot_to_dict(self, snapshot: ReportSnapshot) -> dict:
         return {
