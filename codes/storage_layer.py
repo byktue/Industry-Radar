@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 from typing import List, Optional
 
 from config import DATA_DIR
@@ -81,6 +82,44 @@ class StorageClient:
         
         return history_path
 
+    def load_latest_fetch(self) -> Optional[ReportSnapshot]:
+        """加载最新抓取数据（latest_fetch.json）
+        
+        Returns:
+            Optional[ReportSnapshot]: 快照对象，如果文件不存在则返回 None
+        """
+        path = os.path.join(self.base_dir, "latest_fetch.json")
+        if not os.path.exists(path):
+            logger.info("latest_fetch.json not found")
+            return None
+        
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return self._dict_to_snapshot(data)
+        except Exception as e:
+            logger.error(f"Failed to load latest fetch: {e}")
+            return None
+    
+    def load_current_report(self) -> Optional[ReportSnapshot]:
+        """加载当前报告（current_report.json）用于增量对比
+        
+        Returns:
+            Optional[ReportSnapshot]: 快照对象，如果文件不存在则返回 None
+        """
+        path = os.path.join(self.base_dir, "current_report.json")
+        if not os.path.exists(path):
+            logger.info("current_report.json not found")
+            return None
+        
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return self._dict_to_snapshot(data)
+        except Exception as e:
+            logger.error(f"Failed to load current report: {e}")
+            return None
+    
     def load_latest_snapshot(self) -> Optional[ReportSnapshot]:
         """加载最新快照（用于增量对比的 old_snapshot）。
         

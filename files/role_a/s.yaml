@@ -1,0 +1,70 @@
+# 阿里云函数计算配置示例
+# 此文件为 Serverless Devs 工具的配置模板
+
+edition: 1.0.0
+name: industry-radar
+access: default  # 使用 `s config add` 配置的密钥别名
+
+services:
+  industry-radar:
+    component: fc
+    props:
+      region: cn-hangzhou  # 可选：cn-beijing, cn-shanghai, cn-hangzhou 等
+      
+      service:
+        name: industry-radar-service
+        description: Industry Radar Intelligence Agent - 行业研究雷达
+        logConfig:
+          # 可选：配置日志服务 SLS
+          # project: industry-radar-logs
+          # logstore: function-logs
+      
+      function:
+        name: industry-radar-pipeline
+        description: Main pipeline function for Industry Radar
+        runtime: python3.9  # 支持 python3.9 或 python3.10
+        codeUri: ../../  # 相对于此文件的项目根目录
+        handler: files.role_a.fc_handler.handler
+        memorySize: 512  # 内存大小（MB），建议 512 或以上
+        timeout: 300  # 超时时间（秒），建议 300（5分钟）
+        
+        # 环境变量配置
+        # 方式1: 从本地环境变量读取（推荐，避免泄露）
+        environmentVariables:
+          OSS_ACCESS_KEY_ID: ${env(OSS_ACCESS_KEY_ID)}
+          OSS_ACCESS_KEY_SECRET: ${env(OSS_ACCESS_KEY_SECRET)}
+          OSS_BUCKET_NAME: ${env(OSS_BUCKET_NAME)}
+          OSS_ENDPOINT: ${env(OSS_ENDPOINT, oss-cn-hangzhou.aliyuncs.com)}
+          OSS_PREFIX: ${env(OSS_PREFIX, industry-radar/)}
+          KEYWORD: ${env(KEYWORD, 半导体)}
+          # LLM_API_KEY: ${env(LLM_API_KEY)}
+          # LLM_ENDPOINT: ${env(LLM_ENDPOINT)}
+        
+        # 方式2: 直接填写（不推荐，存在安全风险）
+        # environmentVariables:
+        #   OSS_ENDPOINT: oss-cn-hangzhou.aliyuncs.com
+        #   OSS_BUCKET_NAME: your-bucket-name
+        #   KEYWORD: 半导体
+      
+      triggers:
+        - name: timer-trigger-6h
+          type: timer
+          config:
+            cronExpression: 0 */6 * * *  # 每 6 小时执行一次
+            enable: true
+            # 可选：传递给函数的 payload
+            # payload: '{"keyword": "半导体"}'
+
+# 其他定时触发示例（取消注释以使用）:
+# 
+# 每天凌晨2点:
+# cronExpression: 0 2 * * *
+#
+# 每天早中晚三次（8:00, 14:00, 20:00）:
+# cronExpression: 0 8,14,20 * * *
+#
+# 每周一上午9点:
+# cronExpression: 0 9 * * 1
+#
+# 每小时:
+# cronExpression: 0 * * * *

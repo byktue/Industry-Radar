@@ -24,6 +24,17 @@ LLM_ENDPOINT = os.getenv("LLM_ENDPOINT", "")
 # 告警配置（用于故障通知）
 ALERT_WEBHOOK = os.getenv("ALERT_WEBHOOK", "")
 
+# OSS 配置（从环境变量读取）
+OSS_ENDPOINT = os.environ.get("OSS_ENDPOINT", "")
+OSS_ACCESS_KEY_ID = os.environ.get("OSS_ACCESS_KEY_ID", "")
+OSS_ACCESS_KEY_SECRET = os.environ.get("OSS_ACCESS_KEY_SECRET", "")
+OSS_BUCKET_NAME = os.environ.get("OSS_BUCKET_NAME", "")
+OSS_PREFIX = os.environ.get("OSS_PREFIX", "industry-radar/")
+
+# LLM 配置（从环境变量读取）
+LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
+LLM_ENDPOINT = os.environ.get("LLM_ENDPOINT", "")
+
 # LLM 提示词模板（占位）
 LLM_COMPARE_PROMPT = (
     "请对比以下两段信息，识别数值或结论变化，"

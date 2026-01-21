@@ -46,7 +46,9 @@ def resolve_conflicts(changes: List[ChangeItem]) -> List[ConflictDecision]:
     grouped: Dict[str, List[ChangeItem]] = {}
     for c in changes:
         grouped.setdefault(c.field, []).append(c)
-
+    
+    logger.info(f"Grouped changes into {len(grouped)} fields")
+    
     decisions: List[ConflictDecision] = []
     for field, items in grouped.items():
         # 如果只有一个来源，不是真正的冲突，但仍然返回决策（用于统一处理）
@@ -102,3 +104,36 @@ def resolve_conflicts(changes: List[ChangeItem]) -> List[ConflictDecision]:
         )
     
     return decisions
+
+
+def _get_source_weight(source: SourceType | str) -> float:
+    """获取来源权重
+    
+    Args:
+        source: 来源类型（SourceType 或字符串）
+        
+    Returns:
+        float: 权重值
+    """
+    normalized = _normalize_source(source)
+    return SOURCE_WEIGHTS.get(normalized, 0.0)
+
+
+def _normalize_source(source: SourceType | str) -> SourceType:
+    """规范化来源类型
+    
+    Args:
+        source: 来源（SourceType 或字符串）
+        
+    Returns:
+        SourceType: 规范化的来源类型
+    """
+    if isinstance(source, SourceType):
+        return source
+    
+    # 字符串转换为 SourceType
+    try:
+        return SourceType(source)
+    except ValueError:
+        logger.warning(f"Unknown source type: {source}, defaulting to MEDIA")
+        return SourceType.MEDIA
