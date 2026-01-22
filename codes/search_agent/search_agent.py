@@ -164,7 +164,9 @@ class SearchAgent:
                             "score": 5.0
                         })
             scored_articles = []
-            for item in scored_results:
+            total_scored = len(scored_results)
+            for i, item in enumerate(scored_results):
+                print(f"正在评分第 {i+1}/{total_scored} 条内容...", flush=True)
                 try:
                     if "title" not in item:
                         item["title"] = "未知标题"

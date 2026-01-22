@@ -58,17 +58,3 @@ class ScraperAgent:
         return items
 
 
-def main() -> None:
-    keyword = input("请输入查询行业：").strip()
-    if not keyword:
-        keyword = DEFAULT_KEYWORD
-
-    # 延迟导入，避免与 orchestrator 的互相 import 产生循环依赖。
-    from orchestrator import run_pipeline
-
-    result = run_pipeline(keyword=keyword)
-    print(json.dumps(result, ensure_ascii=False, indent=2))
-
-
-if __name__ == "__main__":
-    main()

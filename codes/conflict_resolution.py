@@ -19,7 +19,7 @@ def resolve_conflicts(changes: List[ChangeItem]) -> List[ConflictDecision]:
         # 按预设的来源权重排序（官方 > 媒体 > 传闻）
         items_sorted = sorted(
             items,
-            key=lambda x: SOURCE_WEIGHTS.get(SourceType(x.source), 0.0),
+            key=lambda x: SOURCE_WEIGHTS.get(x.source, 0.0),
             reverse=True,
         )
         
@@ -28,6 +28,13 @@ def resolve_conflicts(changes: List[ChangeItem]) -> List[ConflictDecision]:
         
         # 记录被舍弃的低权重来源，供成员 C 进行“待核实”展示
         pending = [i.source for i in items_sorted[1:]]
+
+        # 收集冲突候选值（去重），用于在最终报告中体现“仲裁发生过”
+        candidates: List[str] = []
+        for it in items_sorted[1:]:
+            v = (it.new or "").strip()
+            if v and v != (chosen.new or "").strip() and v not in candidates:
+                candidates.append(v)
         
         decisions.append(
             ConflictDecision(
@@ -36,7 +43,12 @@ def resolve_conflicts(changes: List[ChangeItem]) -> List[ConflictDecision]:
                 chosen_source=chosen.source,
                 pending_sources=pending,
                 # 核心改进：理由不再是代码逻辑，而是 AI 生成的行业洞察
-                reason=chosen.insight 
+                reason=chosen.insight,
+                evidence=getattr(chosen, "evidence", []) or [],
+                old_value=getattr(chosen, "old", "") or "",
+                status=getattr(chosen, "status", "") or "",
+                confidence=float(getattr(chosen, "confidence", 0.0) or 0.0),
+                conflicting_values=candidates,
             )
         )
         

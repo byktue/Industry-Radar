@@ -6,6 +6,18 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 DEFAULT_KEYWORD = "半导体"
 
+# --- 报告输出控制（精简版 / 详细版） ---
+# compact: 面向展示的精简报告（默认）
+# verbose: 保留更多调试/中间信息
+REPORT_MODE = os.getenv("REPORT_MODE", "compact").strip().lower()
+
+# 精简输出的条目上限（避免 final_analysis 过长）
+MAX_DECISIONS = int(os.getenv("MAX_DECISIONS", "8"))
+MAX_EVIDENCE_PER_DECISION = int(os.getenv("MAX_EVIDENCE_PER_DECISION", "2"))
+
+# 是否在输出中包含调试字段（例如 confidence/key_numbers/snippet）
+INCLUDE_DEBUG_FIELDS = os.getenv("INCLUDE_DEBUG_FIELDS", "0").strip() in {"1", "true", "yes"}
+
 # --- LLM 运行配置 ---
 LLM_MODEL = "deepseek-ai/DeepSeek-V3"
 LLM_BASE_URL = "https://api.siliconflow.cn/v1"

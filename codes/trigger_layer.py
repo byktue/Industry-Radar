@@ -29,7 +29,7 @@ def handler(event: Any, context: Any) -> Dict[str, Any]:
         keyword = DEFAULT_KEYWORD
 
     # 调用已有编排逻辑
-    result = run_pipeline(keyword=keyword)
+    result = run_pipeline(keyword=keyword, print_steps=False)
 
     decisions = result.get("decisions", [])
     raw_changes_count = int(result.get("raw_changes_count", 0) or 0)
