@@ -1,22 +1,74 @@
 from __future__ import annotations
 
-from typing import List
+import json
+from typing import List, Optional
 
+from config import DEFAULT_KEYWORD
 from models import NewsItem, SourceType
+from search_agent.search_agent import SearchAgent
+
+
+def _infer_source_type(source: Optional[str], url: Optional[str]) -> SourceType:
+    s = (source or "").strip()
+    u = (url or "").lower()
+
+    # 粗粒度规则：政府/官方域名 -> official；其余默认 media
+    if ".gov.cn" in u or ".edu.cn" in u:
+        return SourceType.OFFICIAL
+    if any(k in s for k in ("商务部", "工信部", "发改委", "国家统计局", "国务院", "监管", "公告")):
+        return SourceType.OFFICIAL
+    if any(k in s for k in ("谣言", "传闻", "小道消息")):
+        return SourceType.RUMOR
+    return SourceType.MEDIA
 
 
 class ScraperAgent:
-    """采集层：根据行业关键词抓取最新资讯。"""
+    """采集层：将 SearchAgent 的输出转成项目统一的数据模型 NewsItem。"""
+
+    def __init__(
+        self,
+        *,
+        num_rewrites: int = 3,
+        tavily_api_key: Optional[str] = None,
+        dashscope_api_key: Optional[str] = None,
+    ) -> None:
+        self.num_rewrites = num_rewrites
+        self._agent = SearchAgent(api_key=tavily_api_key, dashscope_api_key=dashscope_api_key)
 
     def fetch(self, keyword: str) -> List[NewsItem]:
-        # TODO: 接入新闻 API、雪球、巨潮资讯等数据源
-        # 下面是占位示例数据
-        return [
-            NewsItem(
-                title=f"{keyword} 行业预测更新",
-                content=f"{keyword} 行业增速预测从 5% 调整到 2%",
-                source=SourceType.MEDIA,
-                url="https://example.com/report",
-                published_at="2026-01-19",
+        result = self._agent.run(keyword, self.num_rewrites)
+        items = []
+
+        for r in (result or {}).get("items", []) or []:
+            title = (r.get("title") or "").strip()
+            content = (r.get("content") or "").strip()
+            url = r.get("url")
+            published_at = r.get("published_at")
+
+            items.append(
+                NewsItem(
+                    title=title,
+                    content=content,
+                    source=_infer_source_type(r.get("source"), url),
+                    url=url,
+                    published_at=published_at,
+                )
             )
-        ]
+
+        return items
+
+
+def main() -> None:
+    keyword = input("请输入查询行业：").strip()
+    if not keyword:
+        keyword = DEFAULT_KEYWORD
+
+    # 延迟导入，避免与 orchestrator 的互相 import 产生循环依赖。
+    from orchestrator import run_pipeline
+
+    result = run_pipeline(keyword=keyword)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+if __name__ == "__main__":
+    main()

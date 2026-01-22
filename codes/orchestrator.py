@@ -31,9 +31,19 @@ def run_pipeline(keyword: str) -> Dict[str, Any]:
     storage.save_snapshot(keyword=keyword, items=new_items)
 
     # 返回给成员 C 进行展示的完整数据包
+    decisions_payload = [
+        {
+            "field": d.field,
+            "final_value": d.final_value,
+            "chosen_source": getattr(d.chosen_source, "value", d.chosen_source),
+            "pending_sources": [getattr(s, "value", s) for s in (d.pending_sources or [])],
+            "reason": d.reason,
+        }
+        for d in conflicts
+    ]
     return {
         "keyword": keyword,
         "global_summary": global_report, # 全局总决策
-        "decisions": conflicts,          # 各指标详细决策
+        "decisions": decisions_payload,  # 各指标详细决策（JSON-safe）
         "raw_changes_count": len(changes)
     }

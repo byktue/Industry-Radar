@@ -5,7 +5,7 @@ import os
 from typing import List, Optional
 
 from config import DATA_DIR
-from models import NewsItem, ReportSnapshot, now_ts
+from models import NewsItem, ReportSnapshot, SourceType, now_ts
 
 
 class StorageClient:
@@ -55,20 +55,26 @@ class StorageClient:
         }
 
     def _dict_to_snapshot(self, data: dict) -> ReportSnapshot:
+        def _to_source_type(raw: object) -> SourceType:
+            if isinstance(raw, SourceType):
+                return raw
+            if isinstance(raw, str):
+                try:
+                    return SourceType(raw)
+                except Exception:
+                    return SourceType.MEDIA
+            return SourceType.MEDIA
+
         items = [
             NewsItem(
                 title=i.get("title", ""),
                 content=i.get("content", ""),
-                source=i.get("source", "media"),
+                source=_to_source_type(i.get("source", SourceType.MEDIA.value)),
                 url=i.get("url"),
                 published_at=i.get("published_at"),
             )
             for i in data.get("items", [])
         ]
-        # 兼容 source 字符串
-        for item in items:
-            if not hasattr(item.source, "value"):
-                item.source = item.source  # type: ignore[assignment]
         return ReportSnapshot(
             keyword=data.get("keyword", ""),
             collected_at=data.get("collected_at", ""),

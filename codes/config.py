@@ -1,7 +1,9 @@
 # config.py
 import os
 
-DATA_DIR = "data"
+# 统一将数据写入项目根目录的 data/（Industry-Radar/data），避免相对路径随工作目录漂移。
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 DEFAULT_KEYWORD = "半导体"
 
 # --- LLM 运行配置 ---

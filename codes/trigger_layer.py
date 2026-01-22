@@ -31,13 +31,13 @@ def handler(event: Any, context: Any) -> Dict[str, Any]:
     # 调用已有编排逻辑
     result = run_pipeline(keyword=keyword)
 
-    changes = result.get("changes", [])
-    conflicts = result.get("conflicts", [])
+    decisions = result.get("decisions", [])
+    raw_changes_count = int(result.get("raw_changes_count", 0) or 0)
 
     summary = {
         "keyword": keyword,
-        "raw_changes_count": len(changes),
-        "conflicts_count": len(conflicts),
+        "raw_changes_count": raw_changes_count,
+        "decisions_count": len(decisions),
     }
 
     return {
